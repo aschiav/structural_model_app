@@ -73,13 +73,27 @@ class Capital:
 
     def update(self, economy):
         self.to_move=False
+        self.desired_sector=self.sector
+        self.desired_state=self.state
+        utility=economy.p[self.sector][self.state]*self.r
+
         for i in range(economy.num_sectors):
+            if i!=self.sector: #if sector is different from existing one, turn delta_sector on
+                delta_sector=1
+            else:
+                delta_sector=0
             for j in range(economy.num_states):
-                if economy.p[i][j]*economy.r[i][j] - self.move_sector_cost*(self.sector-i)**2 - self.move_state_cost*(self.state-j)**2 > economy.p[self.sector][self.state]*self.r:
-                #^this will only work with two sectors/states!
+                if j!=self.state: #if state is different from existing one, turn delta_state on
+                    delta_state=1
+                else:
+                    delta_state=0
+
+                alt_utility=economy.p[i][j]*economy.r[i][j] - self.move_sector_cost*delta_sector - self.move_state_cost*delta_state
+                if alt_utility > utility:
                     self.r=economy.r[i][j]
                     self.desired_sector = i
                     self.desired_state = j
+                    utility = alt_utility
                     self.to_move=True
 
 
@@ -275,6 +289,8 @@ class Economy:
                     "K/L":self.K[i][j]/self.L[i][j],
                     "w":self.w[i][j],
                     "r":self.r[i][j],
+                    "MPL":self.w[i][j]/self.p[i][j],
+                    "MPK":self.r[i][j]/self.p[i][j],
                     "A":self.A[i][j],
                     "B":self.B[i][j],
                     "gamma":self.gamma[i][j],
@@ -348,14 +364,17 @@ class Simulation:
         #transform state values from numeric to letters (A and B)
         combined_df["state"]=combined_df["state"].replace({0:'A',1:'B'})
         
+        #transform sector values from numeric to letters (m and s)
+        combined_df["sector"]=combined_df["sector"].replace({0:'m',1:'s'})
+
         return combined_df
     
     def visualize(self, sim_data):
         # List of y variables
-        y_vars = ['r', 'K','w','L','Y', 'p', 'K/L', 'lambda_state', 'lambda_agg', 'psi_state_sector', 'psi_state','psi_agg']
-        y_var_titles=['Profit rate', 'Capital stock', 'Wage', 'Employment', 'Output', 'Prices', 'Capital-labor ratio', 'State-sector employment share', 'Sector employment share (National)', 'Sectoral labor share',
+        y_vars = ['r', 'MPK', 'K','w', 'MPL', 'L','Y', 'p', 'K/L', 'lambda_state', 'lambda_agg', 'psi_state_sector', 'psi_state','psi_agg']
+        y_var_titles=['Profit rate', 'Marginal Product of Capital', 'Capital stock', 'Wage', 'Marginal Product of Labor', 'Employment', 'Output', 'Prices', 'Capital-labor ratio', 'State-sector employment share', 'Sector employment share (National)', 'Sectoral labor share',
                      'State labor share', 'National labor share']
-        y_var_labels=[r'$r$', r'$K$', r'$w$', r'$L$', r'$Y$', r'$p$', r'$K/L$', r'$\lambda_{ij}$', r'$\lambda_{i}$', r'$\psi_{i,j}$', r'$\psi_{j}$', r'$\psi$']
+        y_var_labels=[r'$r$', r'$MRP_{K}$', r'$K$', r'$w$', r'$MRP_{L}$', r'$L$', r'$Y$', r'$p$', r'$K/L$', r'$\lambda_{ij}$', r'$\lambda_{i}$', r'$\psi_{i,j}$', r'$\psi_{j}$', r'$\psi$']
         
         # Create a subplot grid
         fig = make_subplots(rows=len(y_vars), cols=1, subplot_titles=y_var_titles)
@@ -384,7 +403,7 @@ class Simulation:
 
         
        # Use combined raw and formatted string for the title
-        main_title = "Simulation Results"
+        main_title = ""
 
         # Update overall layout
         fig.update_layout(
@@ -398,113 +417,259 @@ class Simulation:
 
 
 # ## Application
-
-
-st.write("""
-# Two-Sector Two-State Model
-
-         
-### About the model
-The model consists of two states. Each state has two sectors. State-sectors begin with an initial endowment of capital ($K$) and labor ($L$). Sectors produce according to a constant elasticity of substitution (CES) production function:
-
-
-### Using the model
-All state-sectors begin in identical states. Adjust the sliders to set initial conditions and economic parameters. Choose the parameter and and magnitude of the shock you would like to simulate. All shocks are applied to sector 0 in state A.
-
-         
-Click on the 'Run Simulation' button at the bottom to start the simulation.
-
-Explore different scenarios by adjusting the inputs and observing the simulation results.
-""")
-
-
-# Define the interactive widgets
-#num_sectors = st.slider('Num Sectors:', min_value=1, max_value=10, value=2)
-num_sectors=2
-#num_states = st.slider('Num States:', min_value=1, max_value=10, value=2)
-num_states=2
-
-# Divide the layout into columns
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    length = st.slider('Length', min_value=1, max_value=30, value=15)
-    K = st.slider(r"Initial capital stock ($K$)", min_value=10, max_value=20000, value=10000)
-    L = st.slider(r"Initial employment ($L$)", min_value=10, max_value=20000, value=10000)
-
-with col2:
-    A = st.slider(r"Hicks-neutral coefficient ($A$)", min_value=0.1, max_value=2.0, value=1.0)
-    B = st.slider(r"Factor-bias coefficient ($B$)", min_value=0.1, max_value=2.0, value=1.0)
-    gamma = st.slider(r"Factor-importance ($\gamma$)", min_value=0.0, max_value=1.0, value=0.5)
-    sigma = st.slider(r"Elasticity of substitution ($\sigma$)", min_value=0.0, max_value=2.0, value=0.5)
-
-with col3:
-    c_ls_min, c_ls_max = st.slider(
-        r'$c_{L,S}\sim U(c_{L,S}^{\min}, c_{L,S}^{\max})$',
-        min_value=0.0, 
-        max_value=2.0, 
-        value=(0.0, 1.0)
-    )
-    c_lt_min, c_lt_max = st.slider(
-        r'$c_{L,T}\sim U(c_{L,T}^{\min}, c_{L,T}^{\max})$',
-        min_value=0.0, 
-        max_value=2.0, 
-        value=(0.0, 1.0)
-    )
-    c_ks_min, c_ks_max = st.slider(
-        r'$c_{K,S}\sim U(c_{K,S}^{\min}, c_{K,S}^{\max})$',
-        min_value=0.0, 
-        max_value=2.0, 
-        value=(0.0, 1.0)
-    )
-    c_kt_min, c_kt_max = st.slider(
-        r'$c_{K,T}\sim U(c_{K,T}^{\min}, c_{K,T}^{\max})$',
-        min_value=0.0, 
-        max_value=2.0, 
-        value=(0.0, 1.0)
-    )
-
-# Additional parameters
-shock_parameter = st.selectbox('Shock parameters:', ['B', 'A', 'gamma', 'sigma'])
-shock_delta = st.number_input('Shock Delta:', value=-0.5)
-shock_time = st.text_input('Shock Time (comma-separated):', value='2')
-
 # Function to run the simulation with given parameters
 def run_simulation(num_sectors, num_states, K, L, A, B, gamma, sigma, 
-     c_ls_min, c_ls_max, c_lt_min, c_lt_max, c_ks_min, c_ks_max, c_kt_min, c_kt_max, 
-     length, shock_parameter, shock_delta, shock_time):
+        c_ls_min, c_ls_max, c_lt_min, c_lt_max, c_ks_min, c_ks_max, c_kt_min, c_kt_max, 
+        length, shock_parameter, shock_delta, shock_time):
     # Convert shock_time string to a list of integers
     shock_time_list = list(map(int, shock_time.split(',')))
 
     # Run the simulation
     sim=Simulation(num_sectors=num_sectors, 
-               num_states=num_states,
-               K=K,
-               L=L,
-               A=A,
-               B=B,
-               gamma=gamma,
-               sigma=sigma,
-               c_ls_min=c_ls_min,
-               c_ls_max=c_ls_max,
-               c_lt_min=c_lt_min,
-               c_lt_max=c_lt_max,
-               c_ks_min=c_ks_min,
-               c_ks_max=c_ks_max,
-               c_kt_min=c_kt_min,
-               c_kt_max=c_kt_max,
-               length=length, 
-               shock_parameter=shock_parameter, 
-               shock_delta=shock_delta, 
-               shock_time=shock_time)
+                num_states=num_states,
+                K=K,
+                L=L,
+                A=A,
+                B=B,
+                gamma=gamma,
+                sigma=sigma,
+                c_ls_min=c_ls_min,
+                c_ls_max=c_ls_max,
+                c_lt_min=c_lt_min,
+                c_lt_max=c_lt_max,
+                c_ks_min=c_ks_max,
+                c_ks_max=c_ks_max,
+                c_kt_min=c_kt_max,
+                c_kt_max=c_kt_max,
+                length=length, 
+                shock_parameter=shock_parameter, 
+                shock_delta=shock_delta, 
+                shock_time=shock_time)
     
     sim_data=sim.run()
     sim.visualize(sim_data)
 
-# Button to trigger the simulation
-if st.button('Run Simulation'):
-    run_simulation(num_sectors, num_states, K, L, A, B, gamma, sigma, 
-     c_ls_min, c_ls_max, c_lt_min, c_lt_max, c_ks_min, c_ks_max, c_kt_min, c_kt_max, 
-     length, shock_parameter, shock_delta, shock_time)    
+# Define the 'Documentation' page
+def page_documentation():
+    st.markdown(r"""
+    # Two-Sector Two-State Model
 
-# Visualization of the results could be added here
+    The model consists of two states. Each state has two sectors. State-sectors begin with an initial endowment of capital ($K$) and labor ($L$). Sectors produce according to a constant elasticity of substitution (CES) production function:
+
+    $$
+    Y_{ij}=A_{ij}\Big[\gamma_{ij}(\tilde{B}_{ij}K_{ij})^{\frac{\sigma_{ij}-1}{\sigma_{ij}}}+(1-\gamma_{ij})L_{ij}^{\frac{\sigma_{ij}-1}{\sigma_{ij}}}\Big]^{\frac{\sigma_{ij}}{\sigma_{ij} -1}}
+    $$
+
+    Assuming perfect competition, factor rewards for capital and labor are:
+
+    $$
+    R_{ij}=p_{ij}\cdot\gamma_{ij}(A_{ij}\tilde{B}_{ij})^{\frac{\sigma_{ij}-1}{\sigma_{ij}}}\Big(\frac{Y_{ij}}{K_{ij}}\Big)^{\frac{1}{\sigma_{ij}}}
+    $$
+
+    $$
+    w_{ij}=p_{ij}\cdot(1-\gamma_{ij})A_{ij}^{{\frac{\sigma_{ij}-1}{\sigma_{ij}}}}\Big(\frac{Y_{ij}}{L_{ij}}\Big)^{\frac{1}{\sigma_{ij}}}
+    $$
+
+    where $p_{ij}$ is the price of good $i$ in state $j$. We assume that the price of the tradable good is equalized automatically across both states, such that $p_{mA}=p_{mB}$.
+                
+    ## Workers
+    Consider two states, ($A$) and ($B$), and two sectors, manufacturing ($m$) and services ($s$). Let ($w_{mA}$) and ($w_{sA}$) be the wages in state ($A$) for the manufacturing and service sectors, respectively, and ($w_{mB}$) and ($w_{sB}$) be the corresponding wages in state ($B$). Transitioning between sectors involves a cost ($c_S$), and transitioning between states involves a cost ($c_T$).
+    
+    Workers earn their income solely from wages, and their utility is represented by a Cobb-Douglas function:
+
+    $$U(C_m, C_s) = C_m^\alpha \cdot C_s^\beta$$
+                
+    where ($C_m$) and ($C_s$) are the consumption levels of the manufacturing good and the service good, respectively, and ($\alpha + \beta = 1$).
+                
+    ##### Consumption
+                
+    The budget constraint for a worker is:
+                
+    $$p_m \cdot C_m + p_s \cdot C_s \leq w_{ij}$$
+                
+    where $p_m$ and $p_s$ are the prices of the manufacturing and service goods, respectively, and $w_{ij}$ is the wage in sector $i$ (either $m$ or $s$) and state $j$ (either $A$ or $B$).
+
+    Given the Cobb-Douglas utility function, the optimal consumption bundle is:
+                
+    $$C_m = \alpha \frac{w_{ij}}{p_m(\alpha+\beta)}, \quad C_s = \beta \frac{w_{ij}}{p_s(\alpha+\beta)}$$
+                
+    Under homothetic preferences, $\alpha+\beta=1$. The maximized utility for a worker in sector \(i\) and state \(j\) is:
+
+    $$
+    U_{ij} = \left( \alpha \frac{w_{ij}}{p_m} \right)^\alpha \cdot \left( \beta \frac{w_{ij}}{p_s} \right)^\beta
+    $$
+    
+    ##### Switching
+    A worker starts assigned to a state-sector. The worker can choose to switch sectors and/or states each iteration of the model. If she transitions sectors, she incurs a one-time cost of $c_{L,S}$. Likewise, a transition of states incurs a cost $c_{L,T}$.
+
+    When transitioning states, the worker faces a new price for the non-tradable good. If the worker starts in sector $m$ in state $A$, her utility is:
+
+    $$
+        U_{mA}=\left( \alpha \frac{w_{mA}}{p_m} \right)^\alpha \cdot \left( \beta \frac{w_{mA}}{p_{sA}} \right)^\beta
+    $$
+
+    By switching sectors, her utility would be:
+
+    $$
+        U_{sA}=\left( \alpha \frac{w_{sA}-c_{L,S}}{p_m} \right)^\alpha \cdot \left( \beta \frac{w_{sA}-c_{L,S}}{p_{sA}} \right)^\beta
+    $$
+
+    By switching states, her utility would be:
+
+    $$
+        U_{mB}=\left( \alpha \frac{w_{mB}-c_{L,T}}{p_m} \right)^\alpha \cdot \left( \beta \frac{w_{mB}-c_{L,T}}{p_{sB}} \right)^\beta
+    $$
+
+    Finally, by switching *both* sectors and states, her utility would be:
+
+    $$
+        U_{sB}=\left( \alpha \frac{w_{sB}-c_{L,S}-c_{L,T}}{p_m} \right)^\alpha \cdot \left( \beta \frac{w_{sB}-c_{L,S}-c_{L,T}}{p_{sB}} \right)^\beta
+    $$
+
+    The worker will thus select the sector and state that maximizes temporal utility. A discounting mechanism could be added without loss of generality. 
+                    
+    ## Capital
+    Each unit of capital is controlled by a single profit maximizing capitalist. There costs $c_{K,S}$ and $c_{K,T}$ associated with moving capital between states and sectors. These costs are drawn from a normal distribution to introduce heterogeneity into the model. The capitalist will switch from sector $m$ to $s$ if:
+
+    $$
+        R_{mA}-c_{K,S}>R_{sA}
+    $$
+
+    and will switch from state $A$ to $B$ if:
+
+    $$
+        R_{mB}-c_{K,T}>R_{mA}
+    $$
+
+    ## Output Prices
+    For the tradable good, consumer demand is met by production in both states:
+    $$
+        Y_{mA}+Y_{mB}=L_{mA}\alpha\frac{\omega_{mA}}{p_m}+L_{sA}\alpha\frac{\omega_{sA}}{p_m}+L_{mB}\alpha\frac{\omega_{mB}}{p_m}+L_{sB}\alpha\frac{\omega_{sB}}{p_m}
+    $$
+
+    Solving for $p_{m}$ yields:
+
+
+    $$
+        p_{m}=\alpha\frac{w_{mA}L_{mA}+w_{sA}L_{sA}+w_{mB}L_{mB}+w_{sB}L_{sB}}{Y_{mA}+Y_{mB}}
+    $$
+
+    For the non-tradable good, consumer demand is met by production within each state:
+
+    $$
+        Y_{sA}=L_{mA}\alpha\frac{\omega_{mA}}{p_{sA}}+L_{sA}\alpha\frac{\omega_{sA}}{p_{sA}}
+    $$
+
+    $$
+        Y_{sB}=L_{mB}\alpha\frac{\omega_{mB}}{p_{sB}}+L_{sB}\alpha\frac{\omega_{sB}}{p_{sB}}
+    $$
+
+    Such that:
+
+    $$
+        p_{sA}=\beta\frac{w_{mA}L_{mA}+w_{sA}L_{sA}}{Y_{sA}}
+    $$
+
+    $$
+        p_{sB}=\beta\frac{w_{mB}L_{mB}+w_{sB}L_{sB}}{Y_{sB}}
+    $$
+
+    Factors are fully utilized, such that output and thus prices are determined.
+                
+    """)
+
+# Define the 'Simulation' page
+def page_simulation():
+    st.markdown(r"""
+    # Two-Sector Two-State Model
+
+    All state-sectors begin in identical states. Adjust the sliders to set initial conditions and economic parameters. Choose the parameter and magnitude of the shock you would like to simulate. All shocks are applied to sector $m$ in state $A$.
+
+    Click on the 'Run Simulation' button at the bottom to start the simulation.
+    
+    #### Model Parameters
+
+    """)
+    
+    # Define the interactive widgets
+    num_sectors = 2
+    num_states = 2
+
+    # Divide the layout into columns
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        K = st.slider(r"Initial capital stock ($K$)", min_value=10, max_value=20000, value=10000)
+        L = st.slider(r"Initial employment ($L$)", min_value=10, max_value=20000, value=10000)
+
+    with col2:
+        A = st.slider(r"Hicks-neutral coefficient ($A$)", min_value=0.1, max_value=2.0, value=1.0)
+        B = st.slider(r"Factor-bias coefficient ($B$)", min_value=0.1, max_value=2.0, value=1.0)
+        gamma = st.slider(r"Factor-importance ($\gamma$)", min_value=0.0, max_value=1.0, value=0.5)
+        sigma = st.slider(r"Elasticity of substitution ($\sigma$)", min_value=0.0, max_value=2.0, value=0.5)
+
+    with col3:
+        c_ls_min, c_ls_max = st.slider(
+            r'$c_{L,S}\sim U(c_{L,S}^{\min}, c_{L,S}^{\max})$',
+            min_value=0.0, 
+            max_value=2.0, 
+            value=(0.0, 1.0)
+        )
+        c_lt_min, c_lt_max = st.slider(
+            r'$c_{L,T}\sim U(c_{L,T}^{\min}, c_{L,T}^{\max})$',
+            min_value=0.0, 
+            max_value=2.0, 
+            value=(0.0, 1.0)
+        )
+        c_ks_min, c_ks_max = st.slider(
+            r'$c_{K,S}\sim U(c_{K,S}^{\min}, c_{K,S}^{\max})$',
+            min_value=0.0, 
+            max_value=2.0, 
+            value=(0.0, 1.0)
+        )
+        c_kt_min, c_kt_max = st.slider(
+            r'$c_{K,T}\sim U(c_{K,T}^{\min}, c_{K,T}^{\max})$',
+            min_value=0.0, 
+            max_value=2.0, 
+            value=(0.0, 1.0)
+        )
+
+    st.markdown(r"""
+    
+    #### Shock parameters
+
+    """)
+
+    #Additional parameters
+    length = int(st.text_input('Length', value=15))
+    shock_parameter = st.selectbox('Shock parameters:', ['B', 'A', 'gamma', 'sigma'])
+    shock_delta = st.number_input('Shock Delta:', value=-0.5)
+    shock_time = st.text_input('Shock Time (comma-separated):', value='2')
+
+
+    # Button to trigger the simulation
+    if st.button('Run Simulation'):
+        st.markdown(r"""#### Results""") 
+        run_simulation(num_sectors, num_states, K, L, A, B, gamma, sigma, 
+         c_ls_min, c_ls_max, c_lt_min, c_lt_max, c_ks_min, c_ks_max, c_kt_min, c_kt_max, 
+         length, shock_parameter, shock_delta, shock_time)   
+
+       
+
+page = "Simulation"
+
+# Define page navigation using buttons
+if st.sidebar.button("Simulation"):
+    page = "Simulation"
+if st.sidebar.button("Documentation"):
+    page = "Documentation"
+
+
+
+# Page routing
+if page == "Documentation":
+    page_documentation()
+elif page == "Simulation":
+    page_simulation()
+
+
