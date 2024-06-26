@@ -51,8 +51,6 @@ class Worker:
                     delta_state=0
 
                 alt_utility=self.utility_function(economy=economy, alpha=self.alpha, beta=self.beta, w=economy.p[i][j]*economy.w[i][j] - self.move_sector_cost*delta_sector - self.move_state_cost*delta_state, state=j)
-                print("utility: ", self.utility)
-                print("alt utility: ", alt_utility)
                 if alt_utility > self.utility:
                     self.w=economy.w[i][j]
                     self.desired_sector = i
@@ -645,7 +643,7 @@ def page_simulation():
     #Additional parameters
     length = int(st.text_input('Length', value=10))
     shock_parameter = st.selectbox('Shock parameters:', ['B', 'A', 'gamma', 'sigma'])
-    shock_delta = st.number_input('Shock Delta:', value=-0.5)
+    shock_delta = st.number_input('Shock Delta:', value=-0.01)
     shock_time = st.text_input('Shock Time (comma-separated):', value='2')
 
 
