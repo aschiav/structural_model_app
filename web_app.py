@@ -25,6 +25,7 @@ class Worker:
         self.alpha=alpha
         self.beta=beta
         self.utility=(alpha * self.w)** alpha * (beta * self.w) ** beta #initial utility set without prices
+        self.utility=self.utility_function(economy=economy, alpha=self.alpha, beta=self.beta, w=economy.p[self.sector][self.state]*economy.w[self.sector][self.state], state=self.state)
 
     def utility_function(self, economy, alpha, beta, w, state):
         if w < 0:
@@ -37,8 +38,7 @@ class Worker:
         self.to_move=False
         self.desired_sector=self.sector
         self.desired_state=self.state
-        self.utility=self.utility
-
+        self.utility=self.utility_function(economy=economy, alpha=self.alpha, beta=self.beta, w=economy.p[self.sector][self.state]*economy.w[self.sector][self.state], state=self.state)
         for i in range(economy.num_sectors):
             if i!=self.sector: #if sector is different from existing one, turn delta_sector on
                 delta_sector=1
@@ -50,7 +50,9 @@ class Worker:
                 else:
                     delta_state=0
 
-                alt_utility=self.utility_function(economy=economy, alpha=self.alpha, beta=self.beta, w=economy.w[i][j] - self.move_sector_cost*delta_sector - self.move_state_cost*delta_state, state=j)
+                alt_utility=self.utility_function(economy=economy, alpha=self.alpha, beta=self.beta, w=economy.p[i][j]*economy.w[i][j] - self.move_sector_cost*delta_sector - self.move_state_cost*delta_state, state=j)
+                print("utility: ", self.utility)
+                print("alt utility: ", alt_utility)
                 if alt_utility > self.utility:
                     self.w=economy.w[i][j]
                     self.desired_sector = i
@@ -289,8 +291,8 @@ class Economy:
                     "K/L":self.K[i][j]/self.L[i][j],
                     "w":self.w[i][j],
                     "r":self.r[i][j],
-                    "MPL":self.w[i][j]/self.p[i][j],
-                    "MPK":self.r[i][j]/self.p[i][j],
+                    "MRPL":self.w[i][j]*self.p[i][j],
+                    "MRPK":self.r[i][j]*self.p[i][j],
                     "A":self.A[i][j],
                     "B":self.B[i][j],
                     "gamma":self.gamma[i][j],
@@ -371,8 +373,8 @@ class Simulation:
     
     def visualize(self, sim_data):
         # List of y variables
-        y_vars = ['r', 'MPK', 'K','w', 'MPL', 'L','Y', 'p', 'K/L', 'lambda_state', 'lambda_agg', 'psi_state_sector', 'psi_state','psi_agg']
-        y_var_titles=['Profit rate', 'Marginal Product of Capital', 'Capital stock', 'Wage', 'Marginal Product of Labor', 'Employment', 'Output', 'Prices', 'Capital-labor ratio', 'State-sector employment share', 'Sector employment share (National)', 'Sectoral labor share',
+        y_vars = ['r', 'MRPK', 'K','w', 'MRPL', 'L','Y', 'p', 'K/L', 'lambda_state', 'lambda_agg', 'psi_state_sector', 'psi_state','psi_agg']
+        y_var_titles=['Profit rate', 'Marginal Revenue Product of Capital', 'Capital stock', 'Wage', 'Marginal Revenue Product of Labor', 'Employment', 'Output', 'Prices', 'Capital-labor ratio', 'State-sector employment share', 'Sector employment share (National)', 'Sectoral labor share',
                      'State labor share', 'National labor share']
         y_var_labels=[r'$r$', r'$MRP_{K}$', r'$K$', r'$w$', r'$MRP_{L}$', r'$L$', r'$Y$', r'$p$', r'$K/L$', r'$\lambda_{ij}$', r'$\lambda_{i}$', r'$\psi_{i,j}$', r'$\psi_{j}$', r'$\psi$']
         
@@ -437,9 +439,9 @@ def run_simulation(num_sectors, num_states, K, L, A, B, gamma, sigma,
                 c_ls_max=c_ls_max,
                 c_lt_min=c_lt_min,
                 c_lt_max=c_lt_max,
-                c_ks_min=c_ks_max,
+                c_ks_min=c_ks_min,
                 c_ks_max=c_ks_max,
-                c_kt_min=c_kt_max,
+                c_kt_min=c_kt_min,
                 c_kt_max=c_kt_max,
                 length=length, 
                 shock_parameter=shock_parameter, 
@@ -641,7 +643,7 @@ def page_simulation():
     """)
 
     #Additional parameters
-    length = int(st.text_input('Length', value=15))
+    length = int(st.text_input('Length', value=10))
     shock_parameter = st.selectbox('Shock parameters:', ['B', 'A', 'gamma', 'sigma'])
     shock_delta = st.number_input('Shock Delta:', value=-0.5)
     shock_time = st.text_input('Shock Time (comma-separated):', value='2')
