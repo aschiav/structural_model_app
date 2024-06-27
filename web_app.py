@@ -101,8 +101,8 @@ class Capital:
 class Economy:
     def __init__(self, num_sectors, num_states,
                  alpha, beta,
-                 K, L,#initial values
-                 A, B, gamma, sigma, #model parameters
+                 K_L_m, K_L_s,#initial values
+                 A, B, gamma, sigma_m, sigma_s, #model parameters
                  c_ls_min, c_ls_max,
                  c_lt_min, c_lt_max,
                  c_ks_min, c_ks_max,
@@ -113,11 +113,12 @@ class Economy:
         self.alpha=alpha
         self.beta=beta
 
-        # Initialize L matrix 
-        self.L = np.array([[L for _ in range(num_states)] for _ in range(num_sectors)], dtype=float)
 
-        # Initialize K matrix
-        self.K = np.array([[K for _ in range(num_states)] for _ in range(num_sectors)], dtype=float)
+        self.K_L = np.array([[K_L_m for _ in range(num_states)] if i == 0 else [K_L_s for _ in range(num_states)] for i in range(num_sectors)], dtype=float)
+
+        # Initialize L and K matrices 
+        self.L = np.array([[10000 for _ in range(num_states)] for _ in range(num_sectors)], dtype=float)
+        self.K = self.L * self.K_L
 
         # Initialize A matrix
         self.A = np.array([[A for _ in range(num_states)] for _ in range(num_sectors)], dtype=float)
@@ -129,7 +130,7 @@ class Economy:
         self.gamma = np.array([[gamma for _ in range(num_states)] for _ in range(num_sectors)], dtype=float)
 
         # Initialize sigma matrix
-        self.sigma = np.array([[sigma for _ in range(num_states)] for _ in range(num_sectors)], dtype=float)
+        self.sigma = np.array([[sigma_m for _ in range(num_states)] if i == 0 else [sigma_s for _ in range(num_states)] for i in range(num_sectors)], dtype=float)
         
         #Compute output matrix
         self.Y = self.A * np.power(self.gamma * np.power((self.B * self.K), (self.sigma-1)/self.sigma)+(1 - self.gamma) * np.power(self.L,(self.sigma-1)/self.sigma),(self.sigma/(self.sigma-1)))
@@ -291,10 +292,6 @@ class Economy:
                     "r":self.r[i][j],
                     "MRPL":self.w[i][j]*self.p[i][j],
                     "MRPK":self.r[i][j]*self.p[i][j],
-                    "A":self.A[i][j],
-                    "B":self.B[i][j],
-                    "gamma":self.gamma[i][j],
-                    "sigma":self.sigma[i][j], 
                     "lambda_state":self.L[i][j]/(self.L[0][j]+self.L[1][j]), #this will only work with two sectors!
                     "psi_state_sector":self.psi[i][j],
                     "psi_state":(self.L[0][j]*self.w[0][j]+self.L[1][j]*self.w[1][j])/(self.Y[0][j]+self.Y[1][j]), #this will only work with two sectors!
@@ -322,8 +319,8 @@ class Economy:
 class Simulation:
     def __init__(self, num_sectors, num_states, length, #simulation parameters
                 alpha=0.5, beta=0.5,
-                 K=10000, L=10000,#initial values
-                 A=1, B=1, gamma=0.5, sigma=0.5, #model parameters
+                 K_L_m=1, K_L_s=1,#initial values
+                 A=1, B=1, gamma=0.5, sigma_m=0.5, sigma_s=0.5, #model parameters
                  c_ls_min=0, c_ls_max=1, #model hyper-parameters
                  c_lt_min=0, c_lt_max=1,
                  c_ks_min=0, c_ks_max=1,
@@ -338,8 +335,8 @@ class Simulation:
         self.shock_time=shock_time
         self.economy=Economy(num_states=num_states, num_sectors=num_sectors,
                              alpha=alpha, beta=beta,
-                             K=K, L=L,#initial values
-                             A=A, B=B, gamma=gamma, sigma=sigma, #model parameters
+                             K_L_m=K_L_m, K_L_s=K_L_s,#initial values
+                             A=A, B=B, gamma=gamma, sigma_m=sigma_m, sigma_s=sigma_s, #model parameters
                              c_ls_min=c_ls_min, c_ls_max=c_ls_max,
                              c_lt_min=c_lt_min, c_lt_max=c_lt_max,
                              c_ks_min=c_ks_min, c_ks_max=c_ks_max,
@@ -371,10 +368,10 @@ class Simulation:
     
     def visualize(self, sim_data):
         # List of y variables
-        y_vars = ['r', 'MRPK', 'K','w', 'MRPL', 'L','Y', 'p', 'K/L', 'lambda_state', 'lambda_agg', 'psi_state_sector', 'psi_state','psi_agg']
-        y_var_titles=['Profit rate', 'Marginal Revenue Product of Capital', 'Capital stock', 'Wage', 'Marginal Revenue Product of Labor', 'Employment', 'Output', 'Prices', 'Capital-labor ratio', 'State-sector employment share', 'Sector employment share (National)', 'Sectoral labor share',
+        y_vars = ['r', 'MRPK','w', 'MRPL','Y', 'p', 'K/L', 'lambda_state', 'lambda_agg', 'psi_state_sector', 'psi_state','psi_agg']
+        y_var_titles=['Profit rate', 'Marginal Revenue Product of Capital', 'Wage', 'Marginal Revenue Product of Labor', 'Output', 'Prices', 'Capital-labor ratio', 'State-sector employment share', 'Sector employment share (National)', 'Sectoral labor share',
                      'State labor share', 'National labor share']
-        y_var_labels=[r'$r$', r'$MRP_{K}$', r'$K$', r'$w$', r'$MRP_{L}$', r'$L$', r'$Y$', r'$p$', r'$K/L$', r'$\lambda_{ij}$', r'$\lambda_{i}$', r'$\psi_{i,j}$', r'$\psi_{j}$', r'$\psi$']
+        y_var_labels=[r'$r$', r'$MRP_{K}$', r'$w$', r'$MRP_{L}$', r'$Y$', r'$p$', r'$K/L$', r'$\lambda_{ij}$', r'$\lambda_{i}$', r'$\psi_{i,j}$', r'$\psi_{j}$', r'$\psi$']
         
         # Create a subplot grid
         fig = make_subplots(rows=len(y_vars), cols=1, subplot_titles=y_var_titles)
@@ -418,7 +415,7 @@ class Simulation:
 
 # ## Application
 # Function to run the simulation with given parameters
-def run_simulation(num_sectors, num_states, K, L, A, B, gamma, sigma, 
+def run_simulation(num_sectors, num_states, K_L_m, K_L_s, A, B, gamma, sigma_m, sigma_s, 
         c_ls_min, c_ls_max, c_lt_min, c_lt_max, c_ks_min, c_ks_max, c_kt_min, c_kt_max, 
         length, shock_parameter, shock_delta, shock_time):
     # Convert shock_time string to a list of integers
@@ -427,12 +424,13 @@ def run_simulation(num_sectors, num_states, K, L, A, B, gamma, sigma,
     # Run the simulation
     sim=Simulation(num_sectors=num_sectors, 
                 num_states=num_states,
-                K=K,
-                L=L,
+                K_L_m=K_L_m,
+                K_L_s=K_L_s,
                 A=A,
                 B=B,
                 gamma=gamma,
-                sigma=sigma,
+                sigma_m=sigma_m,
+                sigma_s=sigma_s,
                 c_ls_min=c_ls_min,
                 c_ls_max=c_ls_max,
                 c_lt_min=c_lt_min,
@@ -599,24 +597,22 @@ def page_simulation():
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        K = st.slider(r"Initial capital stock ($K$)", min_value=10, max_value=20000, value=10000)
-        L = st.slider(r"Initial employment ($L$)", min_value=10, max_value=20000, value=10000)
-
-    with col2:
         A = st.slider(r"Hicks-neutral coefficient ($A$)", min_value=0.1, max_value=2.0, value=1.0)
         B = st.slider(r"Factor-bias coefficient ($B$)", min_value=0.1, max_value=2.0, value=1.0)
         gamma = st.slider(r"Factor-importance ($\gamma$)", min_value=0.0, max_value=1.0, value=0.5)
-        sigma = st.slider(r"Elasticity of substitution ($\sigma$)", min_value=0.0, max_value=2.0, value=0.5)
+        allow_labor_state_switch = st.checkbox(r'$L$ flows between states')
+        allow_capital_state_switch = st.checkbox(r'$K$ flows between states')
+
+
+    with col2:
+        K_L_m = st.slider(r"Capital-labor ratio ($k_m$)", min_value=0.1, max_value=2.0, value=1.0)
+        K_L_s = st.slider(r"Capital-labor ratio ($k_s$)", min_value=0.1, max_value=2.0, value=1.0)
+        sigma_m = st.slider(r"Elasticity of substitution ($\sigma_{m}$)", min_value=0.0, max_value=2.0, value=0.6)
+        sigma_s = st.slider(r"Elasticity of substitution ($\sigma_{s}$)", min_value=0.0, max_value=2.0, value=0.5)
 
     with col3:
         c_ls_min, c_ls_max = st.slider(
             r'$c_{L,S}\sim U(c_{L,S}^{\min}, c_{L,S}^{\max})$',
-            min_value=0.0, 
-            max_value=2.0, 
-            value=(0.0, 1.0)
-        )
-        c_lt_min, c_lt_max = st.slider(
-            r'$c_{L,T}\sim U(c_{L,T}^{\min}, c_{L,T}^{\max})$',
             min_value=0.0, 
             max_value=2.0, 
             value=(0.0, 1.0)
@@ -627,12 +623,26 @@ def page_simulation():
             max_value=2.0, 
             value=(0.0, 1.0)
         )
-        c_kt_min, c_kt_max = st.slider(
-            r'$c_{K,T}\sim U(c_{K,T}^{\min}, c_{K,T}^{\max})$',
-            min_value=0.0, 
-            max_value=2.0, 
-            value=(0.0, 1.0)
-        )
+        if allow_labor_state_switch:
+            c_lt_min, c_lt_max = st.slider(
+                r'$c_{L,T}\sim U(c_{L,T}^{\min}, c_{L,T}^{\max})$',
+                min_value=0.0, 
+                max_value=2.0, 
+                value=(0.0, 1.0)
+            )
+        else:
+            c_lt_min=99999999 #used large number instead of infinity so that 0*c_lt=0
+            c_lt_max=99999999
+        if allow_capital_state_switch:
+            c_kt_min, c_kt_max = st.slider(
+                r'$c_{K,T}\sim U(c_{K,T}^{\min}, c_{K,T}^{\max})$',
+                min_value=0.0, 
+                max_value=2.0, 
+                value=(0.0, 1.0)
+            )
+        else:
+            c_kt_min=99999999
+            c_kt_max=99999999
 
     st.markdown(r"""
     
@@ -641,7 +651,7 @@ def page_simulation():
     """)
 
     #Additional parameters
-    length = int(st.text_input('Length', value=10))
+    length = int(st.text_input('Length', value=30))
     shock_parameter = st.selectbox('Shock parameters:', ['B', 'A', 'gamma', 'sigma'])
     shock_delta = st.number_input('Shock Delta:', value=-0.01)
     shock_time = st.text_input('Shock Time (comma-separated):', value='2')
@@ -650,7 +660,7 @@ def page_simulation():
     # Button to trigger the simulation
     if st.button('Run Simulation'):
         st.markdown(r"""#### Results""") 
-        run_simulation(num_sectors, num_states, K, L, A, B, gamma, sigma, 
+        run_simulation(num_sectors, num_states, K_L_m, K_L_s, A, B, gamma, sigma_m, sigma_s, 
          c_ls_min, c_ls_max, c_lt_min, c_lt_max, c_ks_min, c_ks_max, c_kt_min, c_kt_max, 
          length, shock_parameter, shock_delta, shock_time)   
 
