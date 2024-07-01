@@ -235,8 +235,8 @@ class Economy:
     def update(self):
                 
         #update profits and wages first
-        self.r = self.gamma * np.power(self.A * self.B, (self.sigma - 1)/self.sigma) * np.power(self.Y/self.K, 1/self.sigma) 
-        self.w = (1-self.gamma) * np.power(self.A, (self.sigma - 1)/self.sigma) * np.power(self.Y/self.L, 1/self.sigma) 
+        self.r = self.p * self.gamma * np.power(self.A * self.B, (self.sigma - 1)/self.sigma) * np.power(self.Y/self.K, 1/self.sigma) 
+        self.w = self.p * (1-self.gamma) * np.power(self.A, (self.sigma - 1)/self.sigma) * np.power(self.Y/self.L, 1/self.sigma) 
 
         # Check for negative values and reassign them to 0.01
         self.r = np.where(self.r < 0, 0.01, self.r)
