@@ -25,7 +25,7 @@ class Worker:
         self.alpha=alpha
         self.beta=beta
         self.utility=(alpha * self.w)** alpha * (beta * self.w) ** beta #initial utility set without prices
-        self.utility=self.utility_function(economy=economy, alpha=self.alpha, beta=self.beta, w=economy.p[self.sector][self.state]*economy.w[self.sector][self.state], state=self.state)
+        self.utility=self.utility_function(economy=economy, alpha=self.alpha, beta=self.beta, w=economy.w[self.sector][self.state], state=self.state)
 
     def utility_function(self, economy, alpha, beta, w, state):
         if w < 0:
@@ -38,7 +38,7 @@ class Worker:
         self.to_move=False
         self.desired_sector=self.sector
         self.desired_state=self.state
-        self.utility=self.utility_function(economy=economy, alpha=self.alpha, beta=self.beta, w=economy.p[self.sector][self.state]*economy.w[self.sector][self.state], state=self.state)
+        self.utility=self.utility_function(economy=economy, alpha=self.alpha, beta=self.beta, w=economy.w[self.sector][self.state], state=self.state)
         for i in range(economy.num_sectors):
             if i!=self.sector: #if sector is different from existing one, turn delta_sector on
                 delta_sector=1
@@ -50,7 +50,11 @@ class Worker:
                 else:
                     delta_state=0
 
-                alt_utility=self.utility_function(economy=economy, alpha=self.alpha, beta=self.beta, w=economy.p[i][j]*economy.w[i][j] - self.move_sector_cost*delta_sector - self.move_state_cost*delta_state, state=j)
+                alt_utility=self.utility_function(economy=economy, alpha=self.alpha, beta=self.beta, w=economy.w[i][j] - self.move_sector_cost*delta_sector - self.move_state_cost*delta_state, state=j)
+
+                #print("utility: ", self.utility)
+                #print("alt_utility: ", alt_utility)
+
                 if alt_utility > self.utility:
                     self.w=economy.w[i][j]
                     self.desired_sector = i
@@ -88,7 +92,7 @@ class Capital:
                 else:
                     delta_state=0
 
-                alt_utility=economy.p[i][j]*economy.r[i][j] - self.move_sector_cost*delta_sector - self.move_state_cost*delta_state
+                alt_utility=economy.r[i][j] - self.move_sector_cost*delta_sector - self.move_state_cost*delta_state
                 if alt_utility > utility:
                     self.r=economy.r[i][j]
                     self.desired_sector = i
@@ -134,23 +138,31 @@ class Economy:
         
         #Compute output matrix
         self.Y = self.A * np.power(self.gamma * np.power((self.B * self.K), (self.sigma-1)/self.sigma)+(1 - self.gamma) * np.power(self.L,(self.sigma-1)/self.sigma),(self.sigma/(self.sigma-1)))
-        
-        #Compiute profit matrix
-        self.r = self.gamma * np.power(self.A * self.B, (self.sigma - 1)/self.sigma) * np.power(self.Y/self.K, 1/self.sigma) 
+
+        #compute marginal product matrixes
+        self.MPL=(1-self.gamma) * np.power(self.A, (self.sigma - 1)/self.sigma) * np.power(self.Y/self.L, 1/self.sigma) 
+        self.MPK = self.gamma * np.power(self.A * self.B, (self.sigma - 1)/self.sigma) * np.power(self.Y/self.K, 1/self.sigma) 
+
+        #Compute profit matrix
+        self.r = self.MPK
 
         #Compute wage matrix
-        self.w = (1-self.gamma) * np.power(self.A, (self.sigma - 1)/self.sigma) * np.power(self.Y/self.L, 1/self.sigma) 
+        self.w = self.MPL
 
         # Initialize price matrices
         self.p = np.array([[1 for _ in range(num_states)] for _ in range(num_sectors)], dtype=float)
 
         #initialize manufacturing prices
-        self.p[0][0] = (alpha * np.sum(self.w * self.L)/(self.Y[0][0]+self.Y[0][1]))
-        self.p[0][1] = self.p[0][0]
+        #self.p[0][0] = (alpha * np.sum(self.w * self.L)/(self.Y[0][0]+self.Y[0][1]))
+        #self.p[0][1] = self.p[0][0]
 
         #initialize service prices
-        self.p[1][0] = beta*(self.w[0][0] * self.L[0][0] + self.w[1][0] * self.L[1][0])/(self.Y[1][0])
-        self.p[1][1] = beta*(self.w[0][1] * self.L[0][1] + self.w[1][1] * self.L[1][1])/(self.Y[1][1])
+        #self.p[1][0] = beta*(self.w[0][0] * self.L[0][0] + self.w[1][0] * self.L[1][0])/(self.Y[1][0])
+        #self.p[1][1] = beta*(self.w[0][1] * self.L[0][1] + self.w[1][1] * self.L[1][1])/(self.Y[1][1])
+        
+        #initialize service prices
+        self.p[1][0] = beta * self.MPL[0][0] * self.L[0][0] / (self.Y[1][0] - beta * self.MPL[1][0] * self.L[1][0]) 
+        self.p[1][1] = beta * self.MPL[0][1] * self.L[0][1] / (self.Y[1][1] - beta * self.MPL[1][1] * self.L[1][1]) 
 
         #Compute psi matrix
         self.psi=(self.w * self.L)/ (self.w * self.L + self.r * self.K) 
@@ -235,12 +247,12 @@ class Economy:
     def update(self):
                 
         #update profits and wages first
-        self.r = self.p * self.gamma * np.power(self.A * self.B, (self.sigma - 1)/self.sigma) * np.power(self.Y/self.K, 1/self.sigma) 
-        self.w = self.p * (1-self.gamma) * np.power(self.A, (self.sigma - 1)/self.sigma) * np.power(self.Y/self.L, 1/self.sigma) 
+        self.r = self.p * self.MPK
+        self.w = self.p * self.MPL
 
         # Check for negative values and reassign them to 0.01
-        self.r = np.where(self.r < 0, 0.01, self.r)
-        self.w = np.where(self.w < 0, 0.01, self.w)
+        #self.r = np.where(self.r < 0, 0.01, self.r)
+        #self.w = np.where(self.w < 0, 0.01, self.w)
 
         #update inputs
         self.update_workers()   
@@ -248,14 +260,17 @@ class Economy:
 
         #update output
         self.Y = self.A * np.power(self.gamma * np.power((self.B * self.K), (self.sigma-1)/self.sigma)+(1 - self.gamma) * np.power(self.L,(self.sigma-1)/self.sigma),(self.sigma/(self.sigma-1)))
+        
+        #update marginal product matrixes
+        self.MPL=(1-self.gamma) * np.power(self.A, (self.sigma - 1)/self.sigma) * np.power(self.Y/self.L, 1/self.sigma) 
+        self.MPK = self.gamma * np.power(self.A * self.B, (self.sigma - 1)/self.sigma) * np.power(self.Y/self.K, 1/self.sigma) 
 
-        self.p[0][0] = self.alpha * np.sum(self.w * self.L)/(self.Y[0][0]+self.Y[0][1])
-        self.p[0][1] = self.p[0][0]
-        self.p[1][0] = self.beta*(self.w[0][0] * self.L[0][0] + self.w[1][0] * self.L[1][0])/(self.Y[1][0])
-        self.p[1][1] = self.beta*(self.w[0][1] * self.L[0][1] + self.w[1][1] * self.L[1][1])/(self.Y[1][1])
+        #update prices
+        self.p[1][0] = self.beta * self.MPL[0][0] * self.L[0][0] / (self.Y[1][0] - self.beta * self.MPL[1][0] * self.L[1][0]) 
+        self.p[1][1] = self.beta * self.MPL[0][1] * self.L[0][1] / (self.Y[1][1] - self.beta * self.MPL[1][1] * self.L[1][1]) 
 
         # Check for negative values and reassign them to 0.01
-        self.p = np.where(self.p < 0, 0.01, self.p)
+        #self.p = np.where(self.p < 0, 0.01, self.p)
 
         #update distribution
         self.psi=(self.w * self.L)/ (self.w * self.L + self.r * self.K) 
@@ -290,8 +305,6 @@ class Economy:
                     "K/L":self.K[i][j]/self.L[i][j],
                     "w":self.w[i][j],
                     "r":self.r[i][j],
-                    "MRPL":self.w[i][j]*self.p[i][j],
-                    "MRPK":self.r[i][j]*self.p[i][j],
                     "lambda_state":self.L[i][j]/(self.L[0][j]+self.L[1][j]), #this will only work with two sectors!
                     "psi_state_sector":self.psi[i][j],
                     "psi_state":(self.L[0][j]*self.w[0][j]+self.L[1][j]*self.w[1][j])/(self.Y[0][j]+self.Y[1][j]), #this will only work with two sectors!
@@ -358,6 +371,9 @@ class Simulation:
         # Concatenate all the DataFrames in the state_data list into a single DataFrame
         combined_df = pd.concat(simulation_data, ignore_index=True)
         
+        # Remove the first row where t == 0
+        combined_df = combined_df[combined_df['t'] != 0]
+    
         #transform state values from numeric to letters (A and B)
         combined_df["state"]=combined_df["state"].replace({0:'A',1:'B'})
         
@@ -368,8 +384,8 @@ class Simulation:
     
     def visualize(self, sim_data):
         # List of y variables
-        y_vars = ['r', 'MRPK','w', 'MRPL','Y', 'p', 'K/L', 'lambda_state', 'lambda_agg', 'psi_state_sector', 'psi_state','psi_agg']
-        y_var_titles=['Profit rate', 'Marginal Revenue Product of Capital', 'Wage', 'Marginal Revenue Product of Labor', 'Output', 'Prices', 'Capital-labor ratio', 'State-sector employment share', 'Sector employment share (National)', 'Sectoral labor share',
+        y_vars = ['r','w','Y', 'p', 'K/L', 'lambda_state', 'lambda_agg', 'psi_state_sector', 'psi_state','psi_agg']
+        y_var_titles=['Profit rate (MRPK)', 'Wage (MRPL)', 'Output', 'Prices', 'Capital-labor ratio', 'State-sector employment share', 'Sector employment share (National)', 'Sectoral labor share',
                      'State labor share', 'National labor share']
         y_var_labels=[r'$r$', r'$MRP_{K}$', r'$w$', r'$MRP_{L}$', r'$Y$', r'$p$', r'$K/L$', r'$\lambda_{ij}$', r'$\lambda_{i}$', r'$\psi_{i,j}$', r'$\psi_{j}$', r'$\psi$']
         
@@ -540,39 +556,31 @@ def page_documentation():
     $$
 
     ## Output Prices
-    For the tradable good, consumer demand is met by production in both states:
-    $$
-        Y_{mA}+Y_{mB}=L_{mA}\alpha\frac{\omega_{mA}}{p_m}+L_{sA}\alpha\frac{\omega_{sA}}{p_m}+L_{mB}\alpha\frac{\omega_{mB}}{p_m}+L_{sB}\alpha\frac{\omega_{sB}}{p_m}
-    $$
+    We let the tradable good be the numeraire, such that $p_{mA}=p_{mB}=1$. For the non-tradable good, consumer demand is met by production within each state:
 
-    Solving for $p_{m}$ yields:
+    
+    $$Y_{sA}=L_{mA}\alpha\frac{\omega_{mA}}{p_{sA}}+L_{sA}\alpha\frac{\omega_{sA}}{p_{sA}}$$
 
-
-    $$
-        p_{m}=\alpha\frac{w_{mA}L_{mA}+w_{sA}L_{sA}+w_{mB}L_{mB}+w_{sB}L_{sB}}{Y_{mA}+Y_{mB}}
-    $$
-
-    For the non-tradable good, consumer demand is met by production within each state:
-
-    $$
-        Y_{sA}=L_{mA}\alpha\frac{\omega_{mA}}{p_{sA}}+L_{sA}\alpha\frac{\omega_{sA}}{p_{sA}}
-    $$
-
-    $$
-        Y_{sB}=L_{mB}\alpha\frac{\omega_{mB}}{p_{sB}}+L_{sB}\alpha\frac{\omega_{sB}}{p_{sB}}
-    $$
+    $$Y_{sB}=L_{mB}\alpha\frac{\omega_{mB}}{p_{sB}}+L_{sB}\alpha\frac{\omega_{sB}}{p_{sB}}$$
 
     Such that:
 
-    $$
-        p_{sA}=\beta\frac{w_{mA}L_{mA}+w_{sA}L_{sA}}{Y_{sA}}
-    $$
+    $$p_{sA}=\beta\frac{w_{mA}L_{mA}+w_{sA}L_{sA}}{Y_{sA}}$$
 
-    $$
-        p_{sB}=\beta\frac{w_{mB}L_{mB}+w_{sB}L_{sB}}{Y_{sB}}
-    $$
+    $$ p_{sB}=\beta\frac{w_{mB}L_{mB}+w_{sB}L_{sB}}{Y_{sB}}$$
 
-    Factors are fully utilized, such that output and thus prices are determined.
+    Nominal wage is determined by marginal revenue product of labor ($p\cdot MPL$) such that:
+
+    $$p_{sA}=\beta\frac{p_{mA}\cdot MPL_{mA}\cdot L_{mA}+p_{sA}\cdot MPL_{sA}\cdot L_{sA}}{Y_{sA}}$$
+
+    $$p_{sB}=\beta\frac{p_{mB}\cdot MPL_{mB}\cdot L_{mB}+p_{sB}\cdot MPL_{sB}\cdot L_{sB}}{Y_{sB}}$$
+
+    Solving for $p_{s}$ yields:
+
+    $$p_{sA}=\beta\frac{MPL_{mA}\cdot L_{mA}}{Y_{sA}-\beta\cdot  MPL_{sA}\cdot L_{sA}}$$
+
+    $$p_{sB}=\beta\frac{MPL_{mB}\cdot L_{mB}}{Y_{sB}-\beta\cdot  MPL_{sB}\cdot L_{sB}}$$
+
                 
     """)
 
@@ -600,8 +608,8 @@ def page_simulation():
         A = st.slider(r"Hicks-neutral coefficient ($A$)", min_value=0.1, max_value=2.0, value=1.0)
         B = st.slider(r"Factor-bias coefficient ($B$)", min_value=0.1, max_value=2.0, value=1.0)
         gamma = st.slider(r"Factor-importance ($\gamma$)", min_value=0.0, max_value=1.0, value=0.5)
-        allow_labor_state_switch = st.checkbox(r'$L$ flows between states')
-        allow_capital_state_switch = st.checkbox(r'$K$ flows between states')
+        allow_labor_state_switch = st.checkbox(r'$L$ flows between states', value=True)
+        allow_capital_state_switch = st.checkbox(r'$K$ flows between states', value=True)
 
 
     with col2:
@@ -653,8 +661,8 @@ def page_simulation():
     #Additional parameters
     length = int(st.text_input('Length', value=30))
     shock_parameter = st.selectbox('Shock parameters:', ['B', 'A', 'gamma', 'sigma'])
-    shock_delta = st.number_input('Shock Delta:', value=-0.01)
-    shock_time = st.text_input('Shock Time (comma-separated):', value='2')
+    shock_delta = st.number_input('Shock Delta:', value=-0.5)
+    shock_time = st.text_input('Shock Time (comma-separated):', value='5')
 
 
     # Button to trigger the simulation
