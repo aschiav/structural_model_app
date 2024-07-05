@@ -1,8 +1,7 @@
 
-
 import random
 import pandas as pd
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plte
 import plotly.express as px
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
@@ -51,12 +50,12 @@ class Worker:
 
                 alt_utility=self.utility_function(economy=economy, alpha=self.alpha, beta=self.beta, w=economy.w[i][j] - self.move_sector_cost*delta_sector - self.move_state_cost*delta_state, state=j)
                 if alt_utility > self.utility:
-                    #print("moving from sector", self.sector, " to sector ", i, " because current wage is ", economy.w[self.sector][self.state], " and alternative wage is ", economy.w[i][j])
-                    self.w=economy.w[i][j]
-                    self.desired_sector = i
-                    self.desired_state = j
-                    self.utility = alt_utility
-                    self.to_move=True
+                    if random.choices([True, False], weights=[economy.sensitivity, 1-economy.sensitivity], k=1)[0] == True:
+                        self.w=economy.w[i][j]
+                        self.desired_sector = i
+                        self.desired_state = j
+                        self.utility = alt_utility
+                        self.to_move=True
         
 
 
@@ -90,12 +89,12 @@ class Capital:
 
                 alt_utility=economy.r[i][j] - self.move_sector_cost*delta_sector - self.move_state_cost*delta_state
                 if alt_utility > utility:
-                    self.r=economy.r[i][j]
-                    self.desired_sector = i
-                    self.desired_state = j
-                    utility = alt_utility
-                    self.to_move=True
-
+                    if random.choices([True, False], weights=[economy.sensitivity, 1-economy.sensitivity], k=1)[0] == True:
+                        self.r=economy.r[i][j]
+                        self.desired_sector = i
+                        self.desired_state = j
+                        utility = alt_utility
+                        self.to_move=True
 
 
 class Economy:
@@ -106,8 +105,9 @@ class Economy:
                  c_ls_min, c_ls_max,
                  c_lt_min, c_lt_max,
                  c_ks_min, c_ks_max,
-                 c_kt_min, c_kt_max):
+                 c_kt_min, c_kt_max, sensitivity):
         
+        self.sensitivity=sensitivity
         self.num_sectors = num_sectors
         self.num_states = num_states
         self.alpha=alpha
@@ -141,6 +141,10 @@ class Economy:
 
         # Initialize price matrices
         self.p = np.array([[1 for _ in range(num_states)] for _ in range(num_sectors)], dtype=float)
+        
+        #Begin with 'Baumol equilibrium prices'
+        #self.p[1][0]=(self.L[1][0]/self.Y[1][0]) / (self.L[0][0]/self.Y[0][0])
+        #self.p[1][1]=(self.L[1][1]/self.Y[1][1]) / (self.L[0][1]/self.Y[0][1])
 
         #Compute profit matrix
         self.r = self.p * self.MPK
@@ -230,9 +234,11 @@ class Economy:
    
     def update(self):
         
+        #shock happens here 
+
         #update output
-        self.Y = self.A * np.power(self.gamma * np.power((self.B * self.K), (self.sigma-1)/self.sigma)+(1 - self.gamma) * np.power(self.L,(self.sigma-1)/self.sigma),(self.sigma/(self.sigma-1)))
-        
+        self.Y = self.A * np.power(self.gamma * np.power((self.B * self.K), ((self.sigma-1)/self.sigma))+(1 - self.gamma) * np.power(self.L,((self.sigma-1)/self.sigma)),(self.sigma/(self.sigma-1)))
+    
         #update marginal product matrixes
         self.MPL=(1-self.gamma) * np.power(self.A, (self.sigma - 1)/self.sigma) * np.power(self.Y/self.L, 1/self.sigma) 
         self.MPK = self.gamma * np.power(self.A * self.B, (self.sigma - 1)/self.sigma) * np.power(self.Y/self.K, 1/self.sigma) 
@@ -240,15 +246,19 @@ class Economy:
         #update profits and wages
         self.r = self.p * self.MPK
         self.w = self.p * self.MPL
+    
+        #update prices
+        self.p[1][0]= (self.beta*(self.w[0][0]*self.L[0][0]+self.w[1][0]*self.L[1][0])/(self.Y[1][0]))/self.alpha*np.sum(self.w*self.L)/(self.Y[0][0]+self.Y[0][1])
+        self.p[1][1]= (self.beta*(self.w[0][1]*self.L[0][1]+self.w[1][1]*self.L[1][1])/(self.Y[1][1]))/self.alpha*np.sum(self.w*self.L)/(self.Y[0][0]+self.Y[0][1])
 
         #update inputs
         self.update_workers()   
         self.update_capital()
 
-        #update prices
-        self.p[1][0]= (self.beta*(self.w[0][0]*self.L[0][0]+self.w[1][0]*self.L[1][0])/(self.Y[1][0]))/self.alpha*np.sum(self.w*self.L)/(self.Y[0][0]+self.Y[0][1])
-        self.p[1][1]= (self.beta*(self.w[0][1]*self.L[0][1]+self.w[1][1]*self.L[1][1])/(self.Y[1][1]))/self.alpha*np.sum(self.w*self.L)/(self.Y[0][0]+self.Y[0][1])
-        
+        print("L: ", self.L)
+        print("K: ", self.K)
+
+
         #update distribution
         self.psi=(self.w * self.L)/ (self.w * self.L + self.r * self.K) 
 
@@ -317,7 +327,8 @@ class Simulation:
                  c_lt_min=0, c_lt_max=1,
                  c_ks_min=0, c_ks_max=1,
                  c_kt_min=0, c_kt_max=1,
-                 shock_parameter="A", shock_delta=0, shock_time=0): #shock parameters
+                 shock_parameter="A", shock_delta=0, shock_time=0,#shock parameters
+                 sensitivity=0): 
         
         self.num_sectors=num_sectors
         self.num_states=num_states
@@ -333,6 +344,7 @@ class Simulation:
                              c_lt_min=c_lt_min, c_lt_max=c_lt_max,
                              c_ks_min=c_ks_min, c_ks_max=c_ks_max,
                              c_kt_min=c_kt_min, c_kt_max=c_kt_max,
+                             sensitivity=sensitivity
                             )
         
                 
@@ -408,11 +420,12 @@ class Simulation:
 
 
 
-# ## Application
+### Application ####
+
 # Function to run the simulation with given parameters
 def run_simulation(num_sectors, num_states, K_L_m, K_L_s, A, B, gamma, sigma_m, sigma_s, 
         c_ls_min, c_ls_max, c_lt_min, c_lt_max, c_ks_min, c_ks_max, c_kt_min, c_kt_max, 
-        length, shock_parameter, shock_delta, shock_time):
+        length, shock_parameter, shock_delta, shock_time, sensitivity):
     # Convert shock_time string to a list of integers
     shock_time_list = list(map(int, shock_time.split(',')))
 
@@ -437,7 +450,8 @@ def run_simulation(num_sectors, num_states, K_L_m, K_L_s, A, B, gamma, sigma_m, 
                 length=length, 
                 shock_parameter=shock_parameter, 
                 shock_delta=shock_delta, 
-                shock_time=shock_time)
+                shock_time=shock_time,
+                sensitivity=sensitivity)
     
     sim_data=sim.run()
     sim.visualize(sim_data)
@@ -579,7 +593,6 @@ def page_simulation():
         allow_labor_state_switch = st.checkbox(r'$L$ flows between states', value=True)
         allow_capital_state_switch = st.checkbox(r'$K$ flows between states', value=True)
 
-
     with col2:
         K_L_m = st.slider(r"Capital-labor ratio ($k_m$)", min_value=0.1, max_value=2.0, value=1.0)
         K_L_s = st.slider(r"Capital-labor ratio ($k_s$)", min_value=0.1, max_value=2.0, value=1.0)
@@ -620,6 +633,9 @@ def page_simulation():
             c_kt_min=99999999
             c_kt_max=99999999
 
+        sensitivity = st.slider('Sensitivity', min_value=0.0, max_value=1.0, value=1.0)
+
+
     st.markdown(r"""
     
     #### Shock parameters
@@ -638,7 +654,7 @@ def page_simulation():
         st.markdown(r"""#### Results""") 
         run_simulation(num_sectors, num_states, K_L_m, K_L_s, A, B, gamma, sigma_m, sigma_s, 
          c_ls_min, c_ls_max, c_lt_min, c_lt_max, c_ks_min, c_ks_max, c_kt_min, c_kt_max, 
-         length, shock_parameter, shock_delta, shock_time)   
+         length, shock_parameter, shock_delta, shock_time, sensitivity)   
 
        
 
@@ -657,5 +673,6 @@ if page == "Documentation":
     page_documentation()
 elif page == "Simulation":
     page_simulation()
+
 
 
