@@ -168,7 +168,7 @@ class Economy:
         self.w = self.p * self.MPL
 
         #Compute psi matrix
-        self.psi=(self.w * self.L)/ (self.w * self.L + self.r * self.K) 
+        self.psi=(self.w * self.L)/ (self.p*self.Y) 
         
         # Initialize workers matrix with empty lists
         self.capital = [[[] for _ in range(num_states)] for _ in range(num_sectors)]
@@ -308,7 +308,7 @@ class Economy:
         self.K_L=self.K/self.L
 
         #update distribution
-        self.psi=(self.w * self.L)/ (self.w * self.L + self.r * self.K) 
+        self.psi=(self.w * self.L)/ (self.p*self.Y) 
 
  
 
@@ -346,9 +346,9 @@ class Economy:
                     "r":self.r[i][j],
                     "lambda_state":self.L[i][j]/(self.L[0][j]+self.L[1][j]), #this will only work with two sectors!
                     "psi_state_sector":self.psi[i][j],
-                    "psi_state":(self.L[0][j]*self.w[0][j]+self.L[1][j]*self.w[1][j])/(self.Y[0][j]+self.Y[1][j]), #this will only work with two sectors!
+                    "psi_state":(self.L[0][j]*self.w[0][j]+self.L[1][j]*self.w[1][j])/(self.p[0][j]*self.Y[0][j]+self.p[1][j]*self.Y[1][j]), #this will only work with two sectors!
                     "lambda_agg":(self.L[i][0]+self.L[i][1])/np.sum(self.L), #this will only work with two sectors!
-                    "psi_agg":np.sum(self.L*self.w)/np.sum(self.Y) 
+                    "psi_agg":np.sum(self.L*self.w)/(np.sum(self.p*self.Y) )
                 }
                 df=pd.DataFrame(data, index=[0])
                 dataframe.append(df)
