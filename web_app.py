@@ -10,7 +10,6 @@ import numpy as np
 import streamlit as st
 
 
-
 class Worker:
     def __init__(self, sector, state, alpha, beta, c_s_min, c_s_max, c_t_min, c_t_max, economy):
         self.sector=sector
@@ -101,7 +100,7 @@ class Economy:
     def __init__(self, num_sectors, num_states,
                  alpha, beta,
                  K_L_m, K_L_s,#initial values
-                 A, B, gamma, sigma_m, sigma_s, #model parameters
+                 A_m, A_s, gamma_m, gamma_s, sigma_m, sigma_s, #model parameters
                  c_ls_min, c_ls_max,
                  c_lt_min, c_lt_max,
                  c_ks_min, c_ks_max,
@@ -121,13 +120,22 @@ class Economy:
         self.K = self.L * self.K_L
 
         # Initialize A matrix
-        self.A = np.array([[A for _ in range(num_states)] for _ in range(num_sectors)], dtype=float)
+        self.A = np.array([[1 for _ in range(num_states)] for _ in range(num_sectors)], dtype=float)
+        self.A[0][0]=A_m
+        self.A[0][1]=A_m
+        self.A[1][0]=A_s
+        self.A[1][1]=A_s
 
-        # Initialize B matrix
-        self.B = np.array([[B for _ in range(num_states)] for _ in range(num_sectors)], dtype=float)
+
+        # Initialize B=1 matrix
+        self.B = np.array([[1 for _ in range(num_states)] for _ in range(num_sectors)], dtype=float)
 
         # Initialize gamma matrix
-        self.gamma = np.array([[gamma for _ in range(num_states)] for _ in range(num_sectors)], dtype=float)
+        self.gamma = np.array([[0.5 for _ in range(num_states)] for _ in range(num_sectors)], dtype=float)
+        self.gamma[0][0]=gamma_m
+        self.gamma[0][1]=gamma_m
+        self.gamma[1][0]=gamma_s
+        self.gamma[1][1]=gamma_s
 
         # Initialize sigma matrix
         self.sigma = np.array([[sigma_m for _ in range(num_states)] if i == 0 else [sigma_s for _ in range(num_states)] for i in range(num_sectors)], dtype=float)
@@ -142,9 +150,16 @@ class Economy:
         # Initialize price matrices
         self.p = np.array([[1 for _ in range(num_states)] for _ in range(num_sectors)], dtype=float)
         
-        #Begin with 'Baumol equilibrium prices'
-        #self.p[1][0]=(self.L[1][0]/self.Y[1][0]) / (self.L[0][0]/self.Y[0][0])
-        #self.p[1][1]=(self.L[1][1]/self.Y[1][1]) / (self.L[0][1]/self.Y[0][1])
+        #ACetal prices
+        term1=(self.gamma[0][0]*self.A[0][0]*(self.B[0][0]**((self.sigma[0][0]-1)/self.sigma[0][0])))/(self.gamma[1][0]*self.A[1][0]*(self.B[1][0]**((self.sigma[1][0]-1)/self.sigma[1][0])))
+        term2_numerator=(self.gamma[0][0]*(self.B[0][0]**((self.sigma[0][0]-1)/self.sigma[0][0]))+(1-self.gamma[0][0])*self.K_L[0][0]**((1-self.sigma[0][0])/self.sigma[0][0]))**(1/(self.sigma[0][0]-1))
+        term2_denominator=(self.gamma[1][0]*(self.B[1][0]**((self.sigma[1][0]-1)/self.sigma[1][0]))+(1-self.gamma[1][0])*self.K_L[1][0]**((1-self.sigma[1][0])/self.sigma[1][0]))**(1/(self.sigma[1][0]-1))
+        self.p[1][0]=term1*(term2_numerator/term2_denominator)
+
+        term1 = (self.gamma[0][1] * self.A[0][1] * (self.B[0][1] ** ((self.sigma[0][1] - 1) / self.sigma[0][1]))) / (self.gamma[1][1] * self.A[1][1] * (self.B[1][1] ** ((self.sigma[1][1] - 1) / self.sigma[1][1])))
+        term2_numerator = (self.gamma[0][1] * (self.B[0][1] ** ((self.sigma[0][1] - 1) / self.sigma[0][1])) + (1 - self.gamma[0][1]) * self.K_L[0][1] ** ((1 - self.sigma[0][1]) / self.sigma[0][1])) ** (1 / (self.sigma[0][1] - 1))
+        term2_denominator = (self.gamma[1][1] * (self.B[1][1] ** ((self.sigma[1][1] - 1) / self.sigma[1][1])) + (1 - self.gamma[1][1]) * self.K_L[1][1] ** ((1 - self.sigma[1][1]) / self.sigma[1][1])) ** (1 / (self.sigma[1][1] - 1))
+        self.p[1][1] = term1 * (term2_numerator / term2_denominator)
 
         #Compute profit matrix
         self.r = self.p * self.MPK
@@ -234,6 +249,27 @@ class Economy:
    
     def update(self):
         
+
+        #import warnings
+        #warnings.filterwarnings("ignore")
+
+        #print("Y:")
+        #print(self.Y)
+        #print("MPL:")
+        #print(self.MPL)
+        #print("MPK:")
+        #print(self.MPK)
+        #print("r:")
+        #print(self.r)
+        #print("w:")
+        #print(self.w)
+        #print("L:")
+        #print(self.L)
+        #print("K:")
+        #print(self.K)
+        #print("p:")
+        #print(self.p)
+    
         #shock happens here 
 
         #update output
@@ -248,32 +284,46 @@ class Economy:
         self.w = self.p * self.MPL
     
         #update prices
-        self.p[1][0]= (self.beta*(self.w[0][0]*self.L[0][0]+self.w[1][0]*self.L[1][0])/(self.Y[1][0]))/self.alpha*np.sum(self.w*self.L)/(self.Y[0][0]+self.Y[0][1])
-        self.p[1][1]= (self.beta*(self.w[0][1]*self.L[0][1]+self.w[1][1]*self.L[1][1])/(self.Y[1][1]))/self.alpha*np.sum(self.w*self.L)/(self.Y[0][0]+self.Y[0][1])
+        #self.p[1][0]= (self.beta*(self.w[0][0]*self.L[0][0]+self.w[1][0]*self.L[1][0])/(self.Y[1][0]))/self.alpha*np.sum(self.w*self.L)/(self.Y[0][0]+self.Y[0][1])
+        #self.p[1][1]= (self.beta*(self.w[0][1]*self.L[0][1]+self.w[1][1]*self.L[1][1])/(self.Y[1][1]))/self.alpha*np.sum(self.w*self.L)/(self.Y[0][0]+self.Y[0][1])
 
+        #ACetal prices
+        term1=(self.gamma[0][0]*self.A[0][0]*(self.B[0][0]**((self.sigma[0][0]-1)/self.sigma[0][0])))/(self.gamma[1][0]*self.A[1][0]*(self.B[1][0]**((self.sigma[1][0]-1)/self.sigma[1][0])))
+        term2_numerator=(self.gamma[0][0]*(self.B[0][0]**((self.sigma[0][0]-1)/self.sigma[0][0]))+(1-self.gamma[0][0])*self.K_L[0][0]**((1-self.sigma[0][0])/self.sigma[0][0]))**(1/(self.sigma[0][0]-1))
+        term2_denominator=(self.gamma[1][0]*(self.B[1][0]**((self.sigma[1][0]-1)/self.sigma[1][0]))+(1-self.gamma[1][0])*self.K_L[1][0]**((1-self.sigma[1][0])/self.sigma[1][0]))**(1/(self.sigma[1][0]-1))
+        self.p[1][0]=term1*(term2_numerator/term2_denominator)
+
+        term1 = (self.gamma[0][1] * self.A[0][1] * (self.B[0][1] ** ((self.sigma[0][1] - 1) / self.sigma[0][1]))) / (self.gamma[1][1] * self.A[1][1] * (self.B[1][1] ** ((self.sigma[1][1] - 1) / self.sigma[1][1])))
+        term2_numerator = (self.gamma[0][1] * (self.B[0][1] ** ((self.sigma[0][1] - 1) / self.sigma[0][1])) + (1 - self.gamma[0][1]) * self.K_L[0][1] ** ((1 - self.sigma[0][1]) / self.sigma[0][1])) ** (1 / (self.sigma[0][1] - 1))
+        term2_denominator = (self.gamma[1][1] * (self.B[1][1] ** ((self.sigma[1][1] - 1) / self.sigma[1][1])) + (1 - self.gamma[1][1]) * self.K_L[1][1] ** ((1 - self.sigma[1][1]) / self.sigma[1][1])) ** (1 / (self.sigma[1][1] - 1))
+        self.p[1][1] = term1 * (term2_numerator / term2_denominator)
+
+
+        
         #update inputs
         self.update_workers()   
         self.update_capital()
 
-        print("L: ", self.L)
-        print("K: ", self.K)
-
+        #update capital labor ratios
+        self.K_L=self.K/self.L
 
         #update distribution
         self.psi=(self.w * self.L)/ (self.w * self.L + self.r * self.K) 
 
+ 
 
-    def shock(self, sector, state, parameter, delta):        
-        if parameter=="A":
-            self.A[sector][state]=self.A[sector][state]+delta
-        elif parameter=="B":
-            self.B[sector][state]=self.B[sector][state]+delta
-        elif parameter=="gamma":
-            self.gamma[sector][state]=self.gamma[sector][state]+delta
-        elif parameter=="sigma":
-            self.sigma[sector][state]=self.sigma[sector][state]+delta
-        else:
-            raise Exception("Valid shock parameters are A, B, gamma, and sigma.")
+
+    def shock(self, g_A_ma, g_A_mb, g_A_sa, g_A_sb, g_Bt_ma, g_Bt_mb, g_Bt_sa, g_Bt_sb):
+
+        self.A[0][0]=self.A[0][0]*(1+g_A_ma/100)
+        self.A[0][1]=self.A[0][1]*(1+g_A_mb/100)        
+        self.A[1][0]=self.A[1][0]*(1+g_A_sa/100)
+        self.A[1][1]=self.A[1][1]*(1+g_A_sb/100)
+
+        self.B[0][0]=self.B[0][0]*(1+g_Bt_ma/100)
+        self.B[0][1]=self.B[0][1]*(1+g_Bt_mb/100)        
+        self.B[1][0]=self.B[1][0]*(1+g_Bt_sa/100)
+        self.B[1][1]=self.B[1][1]*(1+g_Bt_sb/100)
         
         
     def get_data(self):
@@ -322,24 +372,29 @@ class Simulation:
     def __init__(self, num_sectors, num_states, length, #simulation parameters
                 alpha=0.5, beta=0.5,
                  K_L_m=1, K_L_s=1,#initial values
-                 A=1, B=1, gamma=0.5, sigma_m=0.5, sigma_s=0.5, #model parameters
+                 A_m=1, A_s=1, B=1, gamma_m=0.5, gamma_s=0.5, sigma_m=0.5, sigma_s=0.5, #model parameters
                  c_ls_min=0, c_ls_max=1, #model hyper-parameters
                  c_lt_min=0, c_lt_max=1,
                  c_ks_min=0, c_ks_max=1,
                  c_kt_min=0, c_kt_max=1,
-                 shock_parameter="A", shock_delta=0, shock_time=0,#shock parameters
+                 g_A_ma=0, g_A_mb=0, g_A_sa=0, g_A_sb=0, g_Bt_ma=0, g_Bt_mb=0, g_Bt_sa=0, g_Bt_sb=0,
                  sensitivity=0): 
         
         self.num_sectors=num_sectors
         self.num_states=num_states
         self.length=length
-        self.shock_parameter=shock_parameter
-        self.shock_delta=shock_delta
-        self.shock_time=shock_time
+        self.g_A_ma=g_A_ma 
+        self.g_A_mb=g_A_mb
+        self.g_A_sa=g_A_sa
+        self.g_A_sb=g_A_sb 
+        self.g_Bt_ma=g_Bt_ma 
+        self.g_Bt_mb=g_Bt_mb 
+        self.g_Bt_sa=g_Bt_sa 
+        self.g_Bt_sb=g_Bt_sb 
         self.economy=Economy(num_states=num_states, num_sectors=num_sectors,
                              alpha=alpha, beta=beta,
                              K_L_m=K_L_m, K_L_s=K_L_s,#initial values
-                             A=A, B=B, gamma=gamma, sigma_m=sigma_m, sigma_s=sigma_s, #model parameters
+                             A_m=A_m, A_s=A_s, gamma_m=gamma_m, gamma_s=gamma_s, sigma_m=sigma_m, sigma_s=sigma_s, #model parameters
                              c_ls_min=c_ls_min, c_ls_max=c_ls_max,
                              c_lt_min=c_lt_min, c_lt_max=c_lt_max,
                              c_ks_min=c_ks_min, c_ks_max=c_ks_max,
@@ -352,9 +407,7 @@ class Simulation:
         simulation_data = []
 
         for t in range(0,self.length):
-            print(t)
-            if str(t) in self.shock_time:
-                self.economy.shock(sector=0, state=0, parameter=self.shock_parameter, delta=self.shock_delta)
+            self.economy.shock(g_A_ma=self.g_A_ma, g_A_mb=self.g_A_mb, g_A_sa=self.g_A_sa, g_A_sb=self.g_A_sb, g_Bt_ma=self.g_Bt_ma, g_Bt_mb=self.g_Bt_mb, g_Bt_sa=self.g_Bt_sa, g_Bt_sb=self.g_Bt_sb)
             self.economy.update()
             df=self.economy.get_data()
             df.insert(0, 't', t)  
@@ -423,20 +476,19 @@ class Simulation:
 ### Application ####
 
 # Function to run the simulation with given parameters
-def run_simulation(num_sectors, num_states, K_L_m, K_L_s, A, B, gamma, sigma_m, sigma_s, 
-        c_ls_min, c_ls_max, c_lt_min, c_lt_max, c_ks_min, c_ks_max, c_kt_min, c_kt_max, 
-        length, shock_parameter, shock_delta, shock_time, sensitivity):
-    # Convert shock_time string to a list of integers
-    shock_time_list = list(map(int, shock_time.split(',')))
+def run_simulation(num_sectors, num_states, K_L_m, K_L_s, A_m, A_s, gamma_m, gamma_s, sigma_m, sigma_s, 
+         c_ls_min, c_ls_max, c_lt_min, c_lt_max, c_ks_min, c_ks_max, c_kt_min, c_kt_max, 
+         length, g_A_ma, g_A_mb, g_A_sa, g_A_sb, g_Bt_ma, g_Bt_mb, g_Bt_sa, g_Bt_sb, sensitivity):
 
     # Run the simulation
     sim=Simulation(num_sectors=num_sectors, 
                 num_states=num_states,
                 K_L_m=K_L_m,
                 K_L_s=K_L_s,
-                A=A,
-                B=B,
-                gamma=gamma,
+                A_m=A_m,
+                A_s=A_s,
+                gamma_m=gamma_m,
+                gamma_s=gamma_s,
                 sigma_m=sigma_m,
                 sigma_s=sigma_s,
                 c_ls_min=c_ls_min,
@@ -448,10 +500,16 @@ def run_simulation(num_sectors, num_states, K_L_m, K_L_s, A, B, gamma, sigma_m, 
                 c_kt_min=c_kt_min,
                 c_kt_max=c_kt_max,
                 length=length, 
-                shock_parameter=shock_parameter, 
-                shock_delta=shock_delta, 
-                shock_time=shock_time,
-                sensitivity=sensitivity)
+                g_A_ma=g_A_ma, 
+                g_A_mb=g_A_mb,
+                g_A_sa=g_A_sa,
+                g_A_sb=g_A_sb, 
+                g_Bt_ma=g_Bt_ma, 
+                g_Bt_mb=g_Bt_mb, 
+                g_Bt_sa=g_Bt_sa, 
+                g_Bt_sb=g_Bt_sb, 
+                sensitivity=sensitivity
+                )
     
     sim_data=sim.run()
     sim.visualize(sim_data)
@@ -549,21 +607,18 @@ def page_documentation():
     $$
 
     ## Output Prices
-    For the non-tradable good, consumer demand is met by production within each state:
+    We let the tradable good be the numeraire, such that $p_{sA}=P_{sA}/P_{m}$ and $p_{sB}=P_{sB}/P_{m}$. We follow Alvarez-Quadrado et al. (2018) for determining the relative price of services:
 
-    $$	Y_{sA}=L_{mA}\beta\frac{w_{mA}}{p_{sA}}+L_{sA}\beta\frac{w_{sA}}{p_{sA}}$$
-    $$	Y_{sB}=L_{mB}\beta\frac{w_{mB}}{p_{sB}}+L_{sB}\beta\frac{w_{sB}}{p_{sB}}$$
-    
-    Such that:
 
-    $$P_{sA}=\beta\frac{w_{mA}L_{mA}+w_{sA}L_{sA}}{Y_{sA}}$$
-    $$P_{sB}=\beta\frac{w_{mB}L_{mB}+w_{sB}L_{sB}}{Y_{sB}}  $$
-    
-    For the tradable good, consumer demand is met by production in both states:
+    $$
+    p_{sA}=\frac{\gamma_{mA}}{\gamma_{sA}}\frac{A_{mA}\tilde{B}_{mA}^{\frac{\sigma_{m}-1}{\sigma_{m}}}}{A_{sA}\tilde{B}_{sA}^{\frac{\sigma_{s}-1}{\sigma_{s}}}}\frac{\Big[\gamma_{mA}\tilde{B}^{\frac{\sigma_{m}-1}{\sigma_{m}}}+(1-\gamma_{mA})\Big(\frac{K_{mA}}{L_{mA}}\Big)^{\frac{1-\sigma_{m}}{\sigma_{m}}}\Big]^{\frac{1}{\sigma_{m}-1}}}{\Big[\gamma_{sA}\tilde{B}^{\frac{\sigma_{s}-1}{\sigma_{s}}}+(1-\gamma_{sA})\Big(\frac{K_{sA}}{L_{sA}}\Big)^{\frac{1-\sigma_{s}}{\sigma_{s}}}\Big]^{\frac{1}{\sigma_{s}-1}}}
+    $$
 
-    $$P_{m}=\alpha\frac{w_{mA}L_{mA}+w_{sA}L_{sA}+w_{mB}L_{mB}+w_{sB}L_{sB}}{Y_{mA}+Y_{mB}}$$
+    $$
+    p_{sB}=\frac{\gamma_{mB}}{\gamma_{sB}}\frac{A_{mB}\tilde{B}_{mB}^{\frac{\sigma_{m}-1}{\sigma_{m}}}}{A_{sB}\tilde{B}_{sB}^{\frac{\sigma_{s}-1}{\sigma_{s}}}}\frac{\Big[\gamma_{mB}\tilde{B}^{\frac{\sigma_{m}-1}{\sigma_{m}}}+(1-\gamma_{mB})\Big(\frac{K_{mB}}{L_{mB}}\Big)^{\frac{1-\sigma_{m}}{\sigma_{m}}}\Big]^{\frac{1}{\sigma_{m}-1}}}{\Big[\gamma_{sB}\tilde{B}^{\frac{\sigma_{s}-1}{\sigma_{s}}}+(1-\gamma_{sB})\Big(\frac{K_{sB}}{L_{sB}}\Big)^{\frac{1-\sigma_{s}}{\sigma_{s}}}\Big]^{\frac{1}{\sigma_{s}-1}}}
+    $$
+        
 
-    We let the tradable good be the numeraire, such that $p_{sA}=P_{sA}/P_{m}$ and $p_{sB}=P_{sB}/P_{m}$. Because output prices are required in order to determine factor prices, we initialize all output prices equal to 1 for the first iteration of the model.                  
     """)
 
 # Define the 'Simulation' page
@@ -571,11 +626,10 @@ def page_simulation():
     st.markdown(r"""
     # Two-Sector Two-State Model
 
-    All state-sectors begin in identical states. Adjust the sliders to set initial conditions and economic parameters. Choose the parameter and magnitude of the shock you would like to simulate. All shocks are applied to sector $m$ in state $A$.
-
     Click on the 'Run Simulation' button at the bottom to start the simulation.
     
-    #### Model Parameters
+    #### Simulation Parameters
+    Tip: If simulation is unstable, try reducing the 'Sensitivity' parameter.
 
     """)
     
@@ -587,17 +641,29 @@ def page_simulation():
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        A = st.slider(r"Hicks-neutral coefficient ($A$)", min_value=0.1, max_value=2.0, value=1.0)
-        B = st.slider(r"Factor-bias coefficient ($B$)", min_value=0.1, max_value=2.0, value=1.0)
-        gamma = st.slider(r"Factor-importance ($\gamma$)", min_value=0.0, max_value=1.0, value=0.5)
+        length = int(st.text_input('Simulation Length', value=30))
+    with col2:
         allow_labor_state_switch = st.checkbox(r'$L$ flows between states', value=True)
         allow_capital_state_switch = st.checkbox(r'$K$ flows between states', value=True)
+    with col3:
+        sensitivity = st.slider('Sensitivity', min_value=0.0, max_value=1.0, value=0.25)
+    
+    st.markdown("""#### Model Parameters""")
+
+    # Divide the layout into columns
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        A_m = st.slider(r"Hicks neutral, initial ($A_{m0}$)", min_value=0.1, max_value=2.0, value=0.604)
+        A_s = st.slider(r"Hicks-neutral coefficient ($A_{s0}$)", min_value=0.1, max_value=2.0, value=0.709)
+        gamma_m = st.slider(r"Capital importance ($\gamma_m$)", min_value=0.0, max_value=1.0, value=0.333)
+        gamma_s = st.slider(r"Capital importance ($\gamma_s$)", min_value=0.0, max_value=1.0, value=0.362)
 
     with col2:
         K_L_m = st.slider(r"Capital-labor ratio ($k_m$)", min_value=0.1, max_value=2.0, value=1.0)
         K_L_s = st.slider(r"Capital-labor ratio ($k_s$)", min_value=0.1, max_value=2.0, value=1.0)
-        sigma_m = st.slider(r"Elasticity of substitution ($\sigma_{m}$)", min_value=0.0, max_value=2.0, value=0.6)
-        sigma_s = st.slider(r"Elasticity of substitution ($\sigma_{s}$)", min_value=0.0, max_value=2.0, value=0.5)
+        sigma_m = st.slider(r"Elasticity of substitution ($\sigma_{m}$)", min_value=0.0, max_value=2.0, value=0.776)
+        sigma_s = st.slider(r"Elasticity of substitution ($\sigma_{s}$)", min_value=0.0, max_value=2.0, value=0.571)
 
     with col3:
         c_ls_min, c_ls_max = st.slider(
@@ -633,28 +699,35 @@ def page_simulation():
             c_kt_min=99999999
             c_kt_max=99999999
 
-        sensitivity = st.slider('Sensitivity', min_value=0.0, max_value=1.0, value=1.0)
 
 
     st.markdown(r"""
     
-    #### Shock parameters
+    #### Technology parameters
 
     """)
 
-    #Additional parameters
-    length = int(st.text_input('Length', value=30))
-    shock_parameter = st.selectbox('Shock parameters:', ['B', 'A', 'gamma', 'sigma'])
-    shock_delta = st.number_input('Shock Delta:', value=-0.5)
-    shock_time = st.text_input('Shock Time (comma-separated):', value='5')
+    # Divide the layout into columns
+    col1, col2 = st.columns(2)
 
+    with col1:
+        g_A_ma = st.number_input(r"Growth rate, Hick's neutral $g(A_{mA})$", value=7.8)
+        g_A_mb = st.number_input(r"Growth rate, Hick's neutral $g(A_{mB})$", value=7.8)
+        g_A_sa = st.number_input(r"Growth rate, Hick's neutral $g(A_{sA})$", value=1.1)
+        g_A_sb = st.number_input(r"Growth rate, Hick's neutral $g(A_{sB})$", value=1.1)
+    
+    with col2:
+        g_Bt_ma = st.number_input(r"Growth of factor imbalance $g(\tilde{B}_{mA})$", value=-9.4)
+        g_Bt_mb = st.number_input(r"Growth of factor imbalance $g(\tilde{B}_{mB})$", value=-9.4)
+        g_Bt_sa = st.number_input(r"Growth of factor imbalance $g(\tilde{B}_{sA})$", value=-7.0)
+        g_Bt_sb = st.number_input(r"Growth of factor imbalance $g(\tilde{B}_{sB})$", value=-7.0)
 
     # Button to trigger the simulation
     if st.button('Run Simulation'):
         st.markdown(r"""#### Results""") 
-        run_simulation(num_sectors, num_states, K_L_m, K_L_s, A, B, gamma, sigma_m, sigma_s, 
+        run_simulation(num_sectors, num_states, K_L_m, K_L_s, A_m, A_s, gamma_m, gamma_s, sigma_m, sigma_s, 
          c_ls_min, c_ls_max, c_lt_min, c_lt_max, c_ks_min, c_ks_max, c_kt_min, c_kt_max, 
-         length, shock_parameter, shock_delta, shock_time, sensitivity)   
+         length, g_A_ma, g_A_mb, g_A_sa, g_A_sb, g_Bt_ma, g_Bt_mb, g_Bt_sa, g_Bt_sb, sensitivity)   
 
        
 
