@@ -73,7 +73,7 @@ class Capital:
         self.to_move=False
         self.desired_sector=self.sector
         self.desired_state=self.state
-        utility=economy.p[self.sector][self.state]*self.r
+        utility=self.r
 
         for i in range(economy.num_sectors):
             if i!=self.sector: #if sector is different from existing one, turn delta_sector on
@@ -297,8 +297,6 @@ class Economy:
         term2_numerator = (self.gamma[0][1] * (self.B[0][1] ** ((self.sigma[0][1] - 1) / self.sigma[0][1])) + (1 - self.gamma[0][1]) * self.K_L[0][1] ** ((1 - self.sigma[0][1]) / self.sigma[0][1])) ** (1 / (self.sigma[0][1] - 1))
         term2_denominator = (self.gamma[1][1] * (self.B[1][1] ** ((self.sigma[1][1] - 1) / self.sigma[1][1])) + (1 - self.gamma[1][1]) * self.K_L[1][1] ** ((1 - self.sigma[1][1]) / self.sigma[1][1])) ** (1 / (self.sigma[1][1] - 1))
         self.p[1][1] = term1 * (term2_numerator / term2_denominator)
-
-
         
         #update inputs
         self.update_workers()   
@@ -338,12 +336,14 @@ class Economy:
                     "L":self.L[i][j],
                     "K":self.K[i][j],
                     "Y":self.Y[i][j],
+                    "pY":self.p[i][j]*self.Y[i][j],
                     "MPL":self.MPL[i][j],
                     "MPK":self.MPK[i][j],
                     "p":self.p[i][j],
                     "K/L":self.K[i][j]/self.L[i][j],
                     "w":self.w[i][j],
                     "r":self.r[i][j],
+                    "utility":(self.alpha * self.w[i][j] / self.p[0][j]) ** self.alpha * (self.beta * self.w[i][j] / self.p[1][j]) ** self.beta,
                     "lambda_state":self.L[i][j]/(self.L[0][j]+self.L[1][j]), #this will only work with two sectors!
                     "psi_state_sector":self.psi[i][j],
                     "psi_state":(self.L[0][j]*self.w[0][j]+self.L[1][j]*self.w[1][j])/(self.p[0][j]*self.Y[0][j]+self.p[1][j]*self.Y[1][j]), #this will only work with two sectors!
@@ -372,7 +372,7 @@ class Simulation:
     def __init__(self, num_sectors, num_states, length, #simulation parameters
                 alpha=0.5, beta=0.5,
                  K_L_m=1, K_L_s=1,#initial values
-                 A_m=1, A_s=1, B=1, gamma_m=0.5, gamma_s=0.5, sigma_m=0.5, sigma_s=0.5, #model parameters
+                 A_m=1, A_s=1, gamma_m=0.5, gamma_s=0.5, sigma_m=0.5, sigma_s=0.5, #model parameters
                  c_ls_min=0, c_ls_max=1, #model hyper-parameters
                  c_lt_min=0, c_lt_max=1,
                  c_ks_min=0, c_ks_max=1,
@@ -429,8 +429,8 @@ class Simulation:
     
     def visualize(self, sim_data):
         # List of y variables
-        y_vars = ['r','w', 'MPL', 'MPK','Y', 'p', 'K/L', 'lambda_state', 'lambda_agg', 'psi_state_sector', 'psi_state','psi_agg']
-        y_var_titles=['Profit rate (MRPK)', 'Wage (MRPL)', 'Marginal Prod. (L)', 'Marginal Prod. (K)', 'Output', 'Prices', 'Capital-labor ratio', 'State-sector employment share', 'Sector employment share (National)', 'Sectoral labor share',
+        y_vars = ['r','w', 'utility','MPL', 'MPK','Y', 'pY', 'p', 'K/L', 'K', 'L', 'lambda_state', 'lambda_agg', 'psi_state_sector', 'psi_state','psi_agg']
+        y_var_titles=['Profit rate (MRPK)', 'Wage (MRPL)', 'Utility', 'Marginal Prod. (L)', 'Marginal Prod. (K)', 'Output', 'Nominal Output', 'Prices', 'Capital-labor ratio', 'Capital', 'Labor', 'State-sector employment share', 'Sector employment share (National)', 'Sectoral labor share',
                      'State labor share', 'National labor share']
         
         # Create a subplot grid
@@ -708,20 +708,26 @@ def page_simulation():
     """)
 
     # Divide the layout into columns
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
-        g_A_ma = st.number_input(r"Growth rate, Hick's neutral $g(A_{mA})$", value=7.8)
-        g_A_mb = st.number_input(r"Growth rate, Hick's neutral $g(A_{mB})$", value=7.8)
-        g_A_sa = st.number_input(r"Growth rate, Hick's neutral $g(A_{sA})$", value=1.1)
-        g_A_sb = st.number_input(r"Growth rate, Hick's neutral $g(A_{sB})$", value=1.1)
-    
-    with col2:
         g_Bt_ma = st.number_input(r"Growth of factor imbalance $g(\tilde{B}_{mA})$", value=-9.4)
         g_Bt_mb = st.number_input(r"Growth of factor imbalance $g(\tilde{B}_{mB})$", value=-9.4)
         g_Bt_sa = st.number_input(r"Growth of factor imbalance $g(\tilde{B}_{sA})$", value=-7.0)
         g_Bt_sb = st.number_input(r"Growth of factor imbalance $g(\tilde{B}_{sB})$", value=-7.0)
+    
+    with col2:
+        g_A_ma = st.number_input(r"Growth rate, Hick's neutral $g(A_{mA})$", value=7.8)
+        g_A_mb = st.number_input(r"Growth rate, Hick's neutral $g(A_{mB})$", value=7.8)
+        g_A_sa = st.number_input(r"Growth rate, Hick's neutral $g(A_{sA})$", value=1.1)
+        g_A_sb = st.number_input(r"Growth rate, Hick's neutral $g(A_{sB})$", value=1.1)
 
+
+    with col3:
+        st.number_input(r"Implied capital-augmenting $g(B_{mA})$", value=g_Bt_ma+g_A_ma, min_value=g_Bt_ma+g_A_ma, max_value=g_Bt_ma+g_A_ma)
+        st.number_input(r"Implied capital-augmenting $g(B_{mB})$", value=g_Bt_mb+g_A_mb, min_value=g_Bt_mb+g_A_mb, max_value=g_Bt_mb+g_A_mb)
+        st.number_input(r"Implied capital-augmenting $g(B_{sA})$", value=g_Bt_sa+g_A_sa, min_value=g_Bt_sa+g_A_sa, max_value=g_Bt_sa+g_A_sa)
+        st.number_input(r"Implied capital-augmenting $g(B_{sB})$", value=g_Bt_sb+g_A_sb, min_value=g_Bt_sb+g_A_sb, max_value=g_Bt_sb+g_A_sb)
     # Button to trigger the simulation
     if st.button('Run Simulation'):
         st.markdown(r"""#### Results""") 
